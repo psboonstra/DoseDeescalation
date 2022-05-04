@@ -13,6 +13,6 @@ There are four main functions in this package:
   3. `get_posterior_prob_mdse()` is a dlever way to calculate the posterior probability of each dose level being the MDSE given draws from the prior and the log-likelihood of data
   4. `sim_model_deesc()` is the function to actually do the simulations
     
-
+Run `vignette("RunSimulations", package = "DoseDeescalation")`
 
 
