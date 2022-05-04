@@ -13,7 +13,6 @@ vignette: >
 
 ```{r setup}
 library(DoseDeescalation)
-library(tidyverse)
 ```
 
 This vignette has two parts. The first is intended to introduce you to various
@@ -266,8 +265,6 @@ stored results living the `out` folder in your working directory.
 
 
 ```{r full_script1, echo = TRUE, eval = FALSE}
-#library(DoseDeescalation)
-#library(tidyverse)
 
 #Flag for whether this is running on a local machine or on a cluster running SLURM
 my_computer = T;
@@ -413,11 +410,6 @@ write_csv(subject_results,
 ### Script for processing the simulation results
 
 ```{r full_script2, echo = TRUE, eval = FALSE}
-
-#library(tidyverse);
-#library(knitr);
-#library(glue)
-#library(cowplot)
 
 # generate_params ----
 curve_list <- gen_curves()
