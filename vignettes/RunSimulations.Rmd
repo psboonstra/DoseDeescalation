@@ -1,0 +1,851 @@
+---
+title: "RunSimulations"
+date: "4-May-2022"
+geometry: margin=1.5cm
+output: 
+  rmarkdown::html_vignette:
+    toc: yes
+vignette: >
+  %\VignetteIndexEntry{RunSimulations}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup}
+library(DoseDeescalation)
+library(tidyverse)
+```
+
+This vignette has two parts. The first is intended to introduce you to various
+functions in the `DoseDeescalation` package. The second gives you the exact
+code for replicating the simulation study in the manuscript. You will need 
+
+## Introduction to the functions
+
+The `gen_curves()` function gives you a list of vectors of probabilities from the
+Hill equation, defined as:
+$$
+\Pr(Y=1|x) =  b + \dfrac{a - b}{1 + (x / c) ^ d} = a + \dfrac{b - a}{1 + (c / x) ^ d}
+$$
+The two formulations above are equivalent. The $a$ parameter is the $y$-intercept, 
+$b$ is the upper asymptote, $c$ is the value of $x$ that gives the midpoint between asymptotes $\Pr(Y=1|x=c) = 0.5 \times\left[\Pr(Y=1|x=0) + \Pr(Y=1|x=\infty)\right] = a/2 + b/2$, and $d$ controls the slope of the curve. 
+
+To use `gen_curves()`, you provide the parameters for the Hill equation as well as the desired number of dose levels. For each combination of parameters you've provided, you get back a vector of numbers giving the true response probabilities (i.e. the height of the curve) as equidistant points along the x-axis. The first point always corresponds to $x=0$, and the last point always corresponds to the value of $x$ that solves the
+equation $\Pr(Y=1|x) = 0.99b$, i.e. 99\% of the maximum possible efficacy in that
+curve. 
+
+```{r gen_curves, eval = TRUE, cache = TRUE}
+# This is Curve 1 from the manuscript. 
+curve1 <- 
+  gen_curves(number_dose_levels = 6, a = 0.2, b_seq = 0.85, c = 0.7, d_seq = 1)[[1]]
+curve1; 
+```
+Note that `gen_curves()` always returns a list, even when just one curve is 
+generated. Thus, I'm simplifying to a vector using `[[1]]`.
+
+Using a relative threshold of 0.8, the true MDSE is dose level `r min(which(curve1 / max(curve1) > 0.8))`,
+since $\xi_1/\xi_6 =$ `r round(curve1[[1]]/curve1[[6]], 3)` $ < 0.8$ and 
+since $\xi_2/\xi_6 =$ `r round(curve1[[2]]/curve1[[6]], 3)` $ > 0.8$.
+
+Now we simulate some data using each trial design applied to this true data
+generating curve. 
+
+### Equal Allocation 
+
+To implement equal allocation, (i) `length(cohort_sizes)` should be 1, which 
+becomes the total sample size of the trial and (ii) `cohort_dose_span` should
+be one less than the total number of dose levels. The first (and
+in this case, only) cohort's dose assignments are deterministic, 
+starting at the highest dose level and proceeding downwards as far as is allowed
+by the value of `cohort_dose_span`, then recycling as necessary. This will
+ensure equal allocation of subjects to all dose levels. 
+
+```{r equal_allocation, eval = TRUE, cache = TRUE}
+equal_allocation <- 
+  sim_model_deesc(n_sim = 10, 
+                  true_eff_curve = curve1,
+                  relative_threshold = 0.8,
+                  cohort_sizes = 102, 
+                  cohort_dose_span = 5,
+                  be_greedy = FALSE,
+                  prior_type = "horseshoe",
+                  mc_warmup = 1e3,
+                  mc_iter = 2.5e3,
+                  mc_chains = 1,
+                  seed = 1)
+names(equal_allocation);
+# average / sd proportion assigned to each dose level
+equal_allocation$subject_results %>%
+  group_by(sim_id, dose_num) %>% 
+  count() %>%
+  group_by(dose_num) %>%
+  summarize(mean(n), sd(n))
+# proportion identifying correct MDSE
+equal_allocation$mdse_results %>%
+  summarize(mean(true_mdse == est_mdse))
+# proportion identifying sub-efficacious dose
+equal_allocation$mdse_results %>%
+  summarize(mean(true_mdse > est_mdse))
+# number of subjects below true MDSE
+equal_allocation$mdse_results %>%
+  summarize(mean(num_below_true_mdse))
+```
+
+### Greedy
+
+To implement Greedy, (i) `cohort_sizes` should be a vector of 1s with length
+equal to the desired total sample size, (ii) `cohort_dose_span` should
+be a vector of 0s with same length as `cohort_sizes`; and (iii) `be_greedy` 
+should be `TRUE`. Each patient is allocated to the smallest dose level having --
+at that time -- an estimated posterior probability of being the MDSE that is 
+greater than the average posterior probability of being the MDSE across all dose
+levels. 
+
+```{r greedy, eval = TRUE, cache = TRUE}
+greedy <- 
+  sim_model_deesc(n_sim = 10, 
+                  true_eff_curve = curve1,
+                  relative_threshold = 0.8,
+                  cohort_sizes = rep(1, 102), 
+                  cohort_dose_span = rep(0, 102),
+                  be_greedy = TRUE,
+                  prior_type = "horseshoe",
+                  mc_warmup = 1e3,
+                  mc_iter = 2.5e3,
+                  mc_chains = 1,
+                  seed = 1)
+names(greedy);
+# average / sd proportion assigned to each dose level
+greedy$subject_results %>%
+  group_by(sim_id, dose_num) %>% 
+  count() %>%
+  group_by(dose_num) %>%
+  summarize(mean(n), sd(n))
+# proportion identifying correct MDSE
+greedy$mdse_results %>%
+  summarize(mean(true_mdse == est_mdse))
+# proportion identifying sub-efficacious dose
+greedy$mdse_results %>%
+  summarize(mean(true_mdse > est_mdse))
+# number of subjects below true MDSE
+greedy$mdse_results %>%
+  summarize(mean(num_below_true_mdse))
+```
+
+
+### Naive
+
+To implement Naive, (i) `cohort_sizes` should be a vector of 1s with length
+equal to the desired total sample size, (ii) `cohort_dose_span` should
+be a vector of 0s with same length as `cohort_sizes`; and (iii) `be_greedy` 
+should be `FALSE`. Each patient is allocated to the dose level having -- at that time -- the largest estimated posterior probability of being the MDSE.
+
+```{r naive, eval = TRUE, cache = TRUE}
+naive <- 
+  sim_model_deesc(n_sim = 10, 
+                  true_eff_curve = curve1,
+                  relative_threshold = 0.8,
+                  cohort_sizes = rep(1, 102), 
+                  cohort_dose_span = rep(0, 102),
+                  be_greedy = FALSE,
+                  prior_type = "horseshoe",
+                  mc_warmup = 1e3,
+                  mc_iter = 2.5e3,
+                  mc_chains = 1,
+                  seed = 1)
+names(naive);
+# average / sd proportion assigned to each dose level
+naive$subject_results %>%
+  group_by(sim_id, dose_num) %>% 
+  count() %>%
+  group_by(dose_num) %>%
+  summarize(mean(n), sd(n))
+# proportion identifying correct MDSE
+naive$mdse_results %>%
+  summarize(mean(true_mdse == est_mdse))
+# proportion identifying sub-efficacious dose
+naive$mdse_results %>%
+  summarize(mean(true_mdse > est_mdse))
+# number of subjects below true MDSE
+naive$mdse_results %>%
+  summarize(mean(num_below_true_mdse))
+```
+
+### Targeted Randomization
+
+To implement Targeted Randomization, (i) `cohort_sizes` should be a vector of 1s with length equal to the desired total sample size, (ii) `cohort_dose_span` should be a vector of 2s with same length as `cohort_sizes`; and (iii) `be_greedy` should be `FALSE`. Each patient is randomly assigned to one of 
+up to three dose levels: the estimated MDSE and up to two dose levels
+below it, with probability proportional to each dose level's posterior probability of being the MDSE.. 
+
+```{r targeted_randomization, eval = TRUE, cache = TRUE}
+targeted_randomization <- 
+  sim_model_deesc(n_sim = 10, 
+                  true_eff_curve = curve1,
+                  relative_threshold = 0.8,
+                  cohort_sizes = rep(1, 102), 
+                  cohort_dose_span = rep(2, 102),
+                  be_greedy = FALSE,
+                  prior_type = "horseshoe",
+                  mc_warmup = 1e3,
+                  mc_iter = 2.5e3,
+                  mc_chains = 1,
+                  seed = 1)
+names(targeted_randomization);
+# average / sd proportion assigned to each dose level
+targeted_randomization$subject_results %>%
+  group_by(sim_id, dose_num) %>% 
+  count() %>%
+  group_by(dose_num) %>%
+  summarize(mean(n), sd(n))
+# proportion identifying correct MDSE
+targeted_randomization$mdse_results %>%
+  summarize(mean(true_mdse == est_mdse))
+# proportion identifying sub-efficacious dose
+targeted_randomization$mdse_results %>%
+  summarize(mean(true_mdse > est_mdse))
+# number of subjects below true MDSE
+targeted_randomization$mdse_results %>%
+  summarize(mean(num_below_true_mdse))
+```
+
+### Targeted Randomization (Cohorts)
+
+To implement Targeted Randomization (Cohorts), (i) `cohort_sizes` should be a vector of cohort-specific sample sizes with length equal to the desired total sample size, (ii) `cohort_dose_span` should be a vector of 2s with same length as `cohort_sizes`; and (iii) `be_greedy` should be `FALSE`. Each patient is randomly assigned to one of up to three dose levels: the estimated MDSE and up to two dose levels below it, with probability proportional to each dose level's posterior probability of being the MDSE. Distinct from Targeted Randomization, 
+however, these probabilities are only updated after each cohort is completed. 
+
+```{r targeted_randomization_cohort, eval = TRUE, cache = TRUE}
+targeted_randomization_cohort <- 
+  sim_model_deesc(n_sim = 10, 
+                  true_eff_curve = curve1,
+                  relative_threshold = 0.8,
+                  cohort_sizes = c(34, 34, 34), 
+                  cohort_dose_span = c(2, 2, 2),
+                  be_greedy = FALSE,
+                  prior_type = "horseshoe",
+                  mc_warmup = 1e3,
+                  mc_iter = 2.5e3,
+                  mc_chains = 1,
+                  seed = 1)
+names(targeted_randomization_cohort);
+# average / sd proportion assigned to each dose level
+targeted_randomization_cohort$subject_results %>%
+  group_by(sim_id, dose_num) %>% 
+  count() %>%
+  group_by(dose_num) %>%
+  summarize(mean(n), sd(n))
+# proportion identifying correct MDSE
+targeted_randomization_cohort$mdse_results %>%
+  summarize(mean(true_mdse == est_mdse))
+# proportion identifying sub-efficacious dose
+targeted_randomization_cohort$mdse_results %>%
+  summarize(mean(true_mdse > est_mdse))
+# number of subjects below true MDSE
+targeted_randomization_cohort$mdse_results %>%
+  summarize(mean(num_below_true_mdse))
+```
+
+
+## Replicating the simulation study in the manuscript
+
+The code below gives the two steps for re-creating the complete simulation study
+from the manuscript. A total of 960 unique scenarios are considered (32 curves
+times 3 sample sizes times 2 prior times times 5 dose-assignment algorithms), 
+and for each scenario, 500 trials are conducted.
+
+There are two steps. The first conducts the simulations. The code in this step 
+was developed on a personal computer but then implemented on a cluster using 
+the SLURM scheduler. In other words, the entire first step should be repeated
+once *for each* of the 960 scenarios, with `array_id` varying from 1 to 960 to 
+indicate this. 
+
+The second step is intended to run on your personal computer, with all of the
+stored results living the `out` folder in your working directory. 
+
+
+### Script for running the simulations
+
+
+```{r full_script1, echo = TRUE, eval = FALSE}
+#library(DoseDeescalation)
+#library(tidyverse)
+
+#Flag for whether this is running on a local machine or on a cluster running SLURM
+my_computer = T;
+
+if(my_computer) {
+  array_id = 3;
+  rstan_options(auto_write = TRUE);
+  n_sim = 10
+  mc_warmup = 5e3;
+  mc_iter = mc_warmup + 5e4
+  mc_chains = 3;
+  options(mc.cores = 1)
+} else {
+  #
+  array_id = as.numeric(Sys.getenv('SLURM_ARRAY_TASK_ID'));
+  rstan_options(auto_write = FALSE);
+  n_sim = 500
+  mc_warmup = 2e4;
+  mc_iter = mc_warmup + 2e5;
+  mc_chains = 3;
+  options(mc.cores = 1)
+}
+array_id_offset = 0
+
+relative_threshold = 0.8;
+
+curve_list <- gen_curves()
+
+design_params <- 
+  expand_grid(
+    curve_id = seq_along(curve_list),
+    prior_type = c("horseshoe", "horsshoe_plus"),
+    n_subjects = c(102, 144, 201), 
+    initial_cohort_props = 0,
+    subsequent_cohort_props = c(1, 1/102, 1/144, 1/201, 1/3),
+    initial_cohort_dose_span = Inf,
+    subsequent_cohort_dose_span = c(0, 2, Inf),
+    be_greedy = c(FALSE, TRUE)
+  ) %>% 
+  filter(
+    # exclude impossible proportions
+    initial_cohort_props + subsequent_cohort_props <= 1,
+    # keep only combinations that result in whole numbers of sample sizes
+    near((n_subjects * initial_cohort_props) %% 1, 0),
+    near((n_subjects * subsequent_cohort_props) %% 1, 0),
+    # Keep the designs of interest
+    (initial_cohort_props == 0 & subsequent_cohort_props == 1 & subsequent_cohort_dose_span == Inf & !be_greedy) | #equal allocation
+      (initial_cohort_props == 0 & subsequent_cohort_props < 1/3 & subsequent_cohort_dose_span == 0 & be_greedy) | # greedy
+      (initial_cohort_props == 0 & subsequent_cohort_props < 1/3 & subsequent_cohort_dose_span == 0 & !be_greedy) | # naive
+      (initial_cohort_props == 0 & subsequent_cohort_props < 1/3 & subsequent_cohort_dose_span > 0 & subsequent_cohort_dose_span < Inf & !be_greedy) | #targeted randomization
+      (near(subsequent_cohort_props, 1/3) & subsequent_cohort_dose_span > 0 & subsequent_cohort_dose_span < Inf & !be_greedy) # cohort targeted randomization
+  ) %>%
+  mutate(design_name = 
+           case_when(
+             initial_cohort_props == 0 & subsequent_cohort_props == 1 ~ "EqAl", 
+             initial_cohort_props == 0 & be_greedy ~ "Gr", 
+             initial_cohort_props == 0 & subsequent_cohort_dose_span == 0 ~ "Nai", 
+             initial_cohort_props == 0 & subsequent_cohort_props  < 1/3  & subsequent_cohort_dose_span < Inf ~ "TRInd",
+             initial_cohort_props == 0 & near(subsequent_cohort_props, 1/3)  & subsequent_cohort_dose_span < Inf ~ "TRCoh"
+           ))
+
+row_id <- 
+  1 + (array_id - 1) %% nrow(design_params)
+curve_id = design_params %>% slice(row_id) %>% pull(curve_id)
+true_eff_curve = curve_list[[curve_id]];
+prior_type = design_params %>% slice(row_id) %>% pull(prior_type)
+n_subjects = design_params %>% slice(row_id) %>% pull(n_subjects)
+initial_cohort_props = design_params %>% slice(row_id) %>% pull(initial_cohort_props)
+subsequent_cohort_props = design_params %>% slice(row_id) %>% pull(subsequent_cohort_props)
+
+n_subsequent_cohorts = round(1 / subsequent_cohort_props) - (initial_cohort_props > 0);
+if(initial_cohort_props > 0) {
+  cohort_sizes = 
+    c(round(initial_cohort_props * n_subjects),
+      round(n_subjects * rep(subsequent_cohort_props, n_subsequent_cohorts))) %>%
+    "+"(., c(n_subjects - sum(.), rep(0, n_subsequent_cohorts))) 
+  cohort_dose_span = 
+    pmin(c(design_params %>% slice(row_id) %>% pull(initial_cohort_dose_span),
+           design_params %>% slice(row_id) %>% pull(subsequent_cohort_dose_span) %>%
+             rep(n_subsequent_cohorts)), 
+         length(true_eff_curve) - 1)
+} else {
+  cohort_sizes = 
+    round(n_subjects * rep(subsequent_cohort_props, n_subsequent_cohorts)) %>%
+    "+"(., c(n_subjects - sum(.), rep(0, n_subsequent_cohorts - 1))) 
+  cohort_dose_span = 
+    pmin(design_params %>% slice(row_id) %>% pull(subsequent_cohort_dose_span) %>%
+           rep(n_subsequent_cohorts), 
+         length(true_eff_curve) - 1)
+}
+
+
+be_greedy = design_params %>% slice(row_id) %>% pull(be_greedy)
+design_name = design_params %>% slice(row_id) %>% pull(design_name)
+seed = 1 + floor((array_id + array_id_offset - 1) / nrow(design_params))
+
+begin = Sys.time()
+
+
+############################
+
+foo <- 
+  sim_model_deesc(n_sim = n_sim, 
+                  true_eff_curve = true_eff_curve,
+                  relative_threshold = relative_threshold,
+                  cohort_sizes = cohort_sizes, 
+                  cohort_dose_span = cohort_dose_span,
+                  be_greedy = be_greedy,
+                  prior_type = prior_type,
+                  mc_warmup = mc_warmup,
+                  mc_iter = mc_iter,
+                  mc_chains = mc_chains,
+                  seed = seed)
+
+med_results <- 
+  bind_cols(
+    array_id = array_id + array_id_offset, 
+    curve_id = curve_id, 
+    design_name = design_name,
+    foo$med_results)
+
+subject_results <- 
+  bind_cols(
+    array_id = array_id + array_id_offset, 
+    curve_id = curve_id, 
+    design_name = design_name,
+    foo$subject_results)
+
+
+Sys.time() - begin
+
+############################
+
+write_csv(med_results,
+          path = paste0("out/job",array_id + array_id_offset,"med_results.csv"));
+
+write_csv(subject_results,
+          path = paste0("out/job",array_id + array_id_offset,"subject_results.csv"));
+
+
+```
+
+### Script for processing the simulation results
+
+```{r full_script2, echo = TRUE, eval = FALSE}
+
+#library(tidyverse);
+#library(knitr);
+#library(glue)
+#library(cowplot)
+
+# generate_params ----
+curve_list <- gen_curves()
+
+# helper_functions ----
+
+turn_to_percent = function(x, format = "f", digits) {
+  if(missing(digits)) {
+    digits = pmin(pmax(1, ceiling(log10(1 / abs(x)) - 2.25)), 3);
+  } else {
+    digits = rep(digits, length.out = length(x))
+  }
+  map2_chr(.x = 100*x, .y = digits, function(x,y) formatC(x = x, format = format, digits = y)) %>%
+    paste0("\\%")
+}
+
+
+formatC_bold_close_max = function(x, threshold, ...) {
+  case_when(
+    (x > max(x) / (1 + threshold)) ~ paste0("\\textbf{", formatC(x, ...), "}"),
+    TRUE ~ formatC(x, ...)
+  )
+}
+
+formatC_bold_close_min = function(x, threshold, ...) {
+  case_when(
+    (x < min(x) * (1 + threshold)) ~ paste0("\\textbf{", formatC(x, ...), "}"),
+    TRUE ~ formatC(x, ...)
+  )
+}
+
+# read_in ----
+
+med_col_types <- 
+  cols(
+    array_id = col_integer(),
+    curve_id = col_integer(),
+    design_name = col_character(),
+    sim_id = col_integer(),
+    stan_file = col_character(),
+    cohort_sizes = col_character(),
+    cohort_dose_span = col_character(), 
+    n_subjects = col_integer(),
+    true_med = col_integer(),
+    est_med = col_integer(),
+    est_xi_at_est_med = col_double(),
+    est_rel_xi_at_est_med = col_double(),
+    prob_med = col_double(),
+    enrollment = col_integer(),
+    num_at_est_med = col_integer(),
+    num_below_est_med = col_integer(),
+    num_above_est_med = col_integer(),
+    num_at_true_med = col_integer(),
+    num_below_true_med = col_integer(),
+    num_above_true_med = col_integer(),
+    avg_true_xi = col_double()
+  )
+
+med_files <- list.files(path = "out/", pattern = ".+med.+csv$")
+cat(length(med_files), "med files found\n")
+
+raw_all_med_results = tibble();
+for(i in med_files) {
+  
+  foo <- read_csv(paste0("out/",i), col_types = med_col_types);
+  raw_all_med_results <- 
+    bind_rows(raw_all_med_results, foo);
+  
+}
+
+# process ----
+
+highlight_med <- function(curve, med) {
+  curve[med] <-
+    glue("\\\\textbf{{{curve[med]}}}") %>%
+    as.character() 
+  
+  paste0("$\\\\{",paste0(curve, collapse = ","),"\\\\}$")
+}
+
+formatted_curve_probs <- 
+  tibble(curve_id = seq_along(curve_list),
+         curve_probs = curve_list) %>%
+  mutate(
+    curve_id_grouping = 
+      case_when(
+        curve_id <= 8 ~ "Group 1",
+        curve_id <= 16 ~ "Group 2",
+        curve_id <= 24 ~ "Group 3",
+        curve_id <= 32 ~ "Group 4"
+      )) %>%
+  left_join(raw_all_med_results %>%
+              select(curve_id, true_med) %>% distinct()) %>% 
+  mutate(curve_id = paste0("Curve ",curve_id),
+         `True Response Probabilities` = 
+           map2_chr(curve_probs,  true_med, highlight_med)) %>%
+  select(curve_id_grouping, curve_id, `True Response Probabilities`) %>%
+  unite(curve_id, c(curve_id, `True Response Probabilities` ), sep = " = ") %>%
+  group_split(curve_id_grouping) %>%
+  map(pull, curve_id)
+
+names(formatted_curve_probs) <-
+  c("Group 1", "Group 2", "Group 3", "Group 4")
+
+all_true_xis <- 
+  tibble(
+    curve_id = 
+      map2(seq_len(length(curve_list)),
+           map_dbl(curve_list, length),
+           ~rep(x = .x, times = .y)) %>% 
+      unlist() %>% 
+      factor(),
+    est_med = curve_list %>% map(seq_along) %>% unlist(),
+    true_xi_at_est_med = curve_list %>% unlist()) %>%
+  group_by(curve_id) %>%
+  mutate(true_rel_xi_at_est_med = true_xi_at_est_med / max(true_xi_at_est_med), 
+         true_med = min(which(true_rel_xi_at_est_med > relative_threshold)))
+
+
+all_med_results <- 
+  raw_all_med_results %>% 
+  mutate(
+    curve_id_grouping = 
+      case_when(
+        curve_id <= 8 ~ "Group 1",
+        curve_id <= 16 ~ "Group 2",
+        curve_id <= 24 ~ "Group 3",
+        curve_id <= 32 ~ "Group 4"
+      ),
+    array_id = factor(array_id),
+    curve_id = factor(curve_id),
+    #design_name = factor(design_name),
+    cohort_dose_span = factor(cohort_dose_span),
+    correct_est_med = (est_med == true_med),
+    correct2_est_med = factor(1 * (est_med == true_med) + 2 * (est_med > true_med), 
+                              levels = c(0, 1, 2), 
+                              labels = c("Under", "Correct", "Over")),
+    Model = factor(stan_file, 
+                   levels = c("iso_horseshoe.stan", "iso_horseshoe_plus.stan"), 
+                   labels = c("HS", "HSPl")))
+
+
+#  Results -----
+
+#### Correct dosing
+
+for(curr_group in c("Group 1", "Group 2", "Group 3", "Group 4")) {
+  
+  table1 <- 
+    all_med_results %>%
+    filter(curve_id_grouping == curr_group) %>%
+    group_by(curve_id, n_subjects, design_name, Model) %>%
+    summarize(mean_correct_est_med =
+                100 * mean(correct_est_med), 
+              mean_num_at_true_med = 
+                100 * mean(num_at_true_med/n_subjects), 
+              .groups = "drop") %>%
+    group_by(curve_id, n_subjects) %>%
+    #mutate(across(where(is.numeric), formatC_bold_close_max, format = "f", threshold = 0.1, digits = 0)) %>%
+    mutate(across(where(is.numeric), formatC, format = "f", digits = 0)) %>%
+    unite(statistic, mean_correct_est_med:mean_num_at_true_med, sep ="(") %>%
+    mutate(statistic = paste0(statistic, ")")) %>%
+    pivot_wider(id_cols =  c(n_subjects, design_name, Model),
+                names_from = curve_id, 
+                names_prefix = "Curve ", 
+                values_from = statistic) %>%
+    arrange(n_subjects, design_name, Model) %>%
+    mutate(
+      linesep_index = 
+        ifelse(duplicated(n_subjects, fromLast = TRUE), "", "\\addlinespace"),
+      n_subjects = 
+        ifelse(duplicated(n_subjects), "", n_subjects),
+      design_name = 
+        ifelse(duplicated(design_name), "", design_name)) %>%
+    rename(`Sample Size` = n_subjects, 
+           `Design` = design_name)
+  
+  
+  linesep_index =
+    pull(table1, linesep_index)
+  table1 <- 
+    table1 %>% select(-linesep_index)
+  
+  header_string = c(" " = 3, 
+                    " " = 8);
+  names(header_string) = c(" ", "True generating curve")
+  
+  table1 %>%
+    knitr::kable(caption =  
+                   glue("Percentage of 500 simulated trials
+                        in which, at the end of the trial, the dose level 
+                        with the highest posterior probability
+                        of being the MED was the true MED (higher is better)
+                        and, in parentheses, the average proportion 
+                        of subjects assigned to the true MDSE (higher is better).") %>%
+                   as.character(),
+                 booktabs = T,
+                 longtable = T,
+                 escape = F,
+                 align = c("lllcccccccc"),
+                 linesep = linesep_index,
+                 label = "foo") %>%
+    #kable_styling(latex_options = c("HOLD_position","repeat_header"),
+    #              repeat_header_method = "replace",
+    #              full_width = F,
+    #              font_size = 10) %>%
+    #add_header_above(header = header_string) %>%
+    #footnote(general = formatted_curve_probs[curr_group],
+    #         general_title = "True generating curve probabilities", 
+    #         threeparttable = T, 
+    #         escape = F) %>%
+    print()
+  
+  rm(table1)
+  
+  cat("\n");
+  cat("\n\\clearpage\n")
+  cat("#####")
+  
+}
+
+#### Under dosing
+
+for(curr_group in c("Group 1", "Group 2", "Group 3", "Group 4")) {
+  
+  table2 <- 
+    all_med_results %>%
+    filter(curve_id_grouping == curr_group) %>%
+    group_by(curve_id, n_subjects, design_name, Model) %>%
+    summarize(mean_below_med =
+                100 * mean(est_med < true_med), 
+              mean_num_below_true_med = 
+                100 * mean(num_below_true_med/n_subjects), 
+              .groups = "drop") %>%
+    group_by(curve_id, n_subjects) %>%
+    #mutate(across(where(is.numeric), formatC_bold_close_max, format = "f", threshold = 0.1, digits = 0)) %>%
+    mutate(across(where(is.numeric), formatC, format = "f", digits = 0)) %>%
+    unite(statistic, mean_below_med:mean_num_below_true_med, sep ="(") %>%
+    mutate(statistic = paste0(statistic, ")")) %>%
+    pivot_wider(id_cols =  c(n_subjects, design_name, Model),
+                names_from = curve_id, 
+                names_prefix = "Curve ", 
+                values_from = statistic) %>%
+    arrange(n_subjects, design_name, Model) %>%
+    mutate(
+      linesep_index = 
+        ifelse(duplicated(n_subjects, fromLast = TRUE), "", "\\addlinespace"),
+      n_subjects = 
+        ifelse(duplicated(n_subjects), "", n_subjects),
+      design_name = 
+        ifelse(duplicated(design_name), "", design_name)) %>%
+    rename(`Sample Size` = n_subjects, 
+           `Design` = design_name)
+  
+  
+  linesep_index =
+    pull(table2, linesep_index)
+  table2 <- 
+    table2 %>% select(-linesep_index)
+  
+  header_string = c(" " = 3, 
+                    " " = 8);
+  names(header_string) = c(" ", "True generating curve")
+  
+  table2 %>%
+    knitr::kable(caption =  
+                   glue("Percentage of 500 simulated trials
+                        in which, at the end of the trial, the dose level 
+                        with the highest posterior probability
+                        of being the MED was below the true MED (lower is better)
+                        and, in parentheses, the average proportion 
+                        of subjects assigned to a dose below 
+                        the true MDSE (lower is better).") %>% as.character(),
+                 booktabs = T,
+                 longtable = T,
+                 escape = F,
+                 align = c("lllcccccccc"),
+                 linesep = linesep_index,
+                 label = "foo") %>%
+    #kable_styling(latex_options = c("HOLD_position","repeat_header"),
+    #              repeat_header_method = "replace",
+    #              full_width = F,
+    #              font_size = 10) %>%
+    #add_header_above(header = header_string) %>%
+    #footnote(general = formatted_curve_probs[curr_group],
+    #         general_title = "True generating curve probabilities", 
+    #         threeparttable = T, 
+    #         escape = F) %>%
+    print()
+  
+  rm(table2)
+  
+  cat("\n");
+  cat("\n\\clearpage\n")
+  cat("#####")
+  
+}
+
+#### RMSE
+
+for(curr_group in c("Group 1", "Group 2", "Group 3", "Group 4")) {
+  
+  
+  table3 <- 
+    all_med_results %>%
+    mutate(true_xi_at_est_med = 
+             map2_dbl(curve_list[curve_id], est_med, ~ .x[[.y]])) %>%
+    filter(curve_id_grouping == curr_group) %>%
+    group_by(curve_id, n_subjects, design_name, Model) %>%
+    summarize(statistic = 
+                sqrt(mean((true_xi_at_est_med - est_xi_at_est_med)^2)),
+              .groups = "drop") %>%
+    group_by(curve_id, n_subjects) %>%
+    #mutate(across(where(is.numeric), formatC_bold_close_max, format = "f", threshold = 0.1, digits = 0)) %>%
+    mutate(across(where(is.numeric), formatC, format = "f", digits = 4)) %>%
+    #unite(statistic, mean_correct_est_med:mean_num_at_true_med, sep ="(") %>%
+    #mutate(statistic = paste0(statistic, ")")) %>%
+    pivot_wider(id_cols =  c(n_subjects, design_name, Model),
+                names_from = curve_id, 
+                names_prefix = "Curve ", 
+                values_from = statistic) %>%
+    arrange(n_subjects, design_name, Model) %>%
+    mutate(
+      linesep_index = 
+        ifelse(duplicated(n_subjects, fromLast = TRUE), "", "\\addlinespace"),
+      n_subjects = 
+        ifelse(duplicated(n_subjects), "", n_subjects),
+      design_name = 
+        ifelse(duplicated(design_name), "", design_name)) %>%
+    rename(`Sample Size` = n_subjects, 
+           `Design` = design_name)
+  
+  
+  linesep_index =
+    pull(table3, linesep_index)
+  table3 <- 
+    table3 %>% select(-linesep_index)
+  
+  header_string = c(" " = 3, 
+                    " " = 8);
+  names(header_string) = c(" ", "True generating curve")
+  
+  table3 %>%
+    knitr::kable(caption =  
+                   glue("Root mean squared error (RMSE) across 500
+                        simulated trials comparing the estimated 
+                        response probability at the estimated MED 
+                        against the true response probability at the
+                        estimated MED (smaller is better). This metric
+                        does not penalize an approach for selecting the 
+                        wrong MED but only for poorly estimating the
+                        response probability at that dose level") %>% as.character(),
+                 booktabs = T,
+                 longtable = T,
+                 escape = F,
+                 align = c("lllcccccccc"),
+                 linesep = linesep_index,
+                 label = "foo") %>%
+    #kable_styling(latex_options = c("HOLD_position","repeat_header"),
+    #              repeat_header_method = "replace",
+    #              full_width = F,
+    #              font_size = 10) %>%
+    #add_header_above(header = header_string) %>%
+    #footnote(general = formatted_curve_probs[curr_group],
+    #         general_title = "True generating curve probabilities", 
+    #         threeparttable = T, 
+    #         escape = F) %>%
+    print()
+  
+  rm(table3)
+  
+  cat("\n");
+  cat("\n\\clearpage\n")
+  cat("#####")
+  
+}
+
+# Figure 1 
+
+curve_plot <- 
+  ggplot(curve_list %>% 
+           map_dfr(~ .x %>% as_tibble(), .id = "name") %>%
+           group_by(name) %>%
+           mutate(dose_num = 1:n(),
+                  is_med = (value / max(value) > 0.8) & (lag(value) / max(value) <= 0.8), 
+                  med_cutpoint = 0.8 * max(value)) %>%
+           ungroup() %>%
+           mutate(
+             curve_id = as.numeric(name),
+             name = factor(name) %>% fct_inorder(),
+             curve_id_grouping = 
+               case_when(
+                 curve_id <= 8 ~ "Group 1 (Curves 1-8)",
+                 curve_id <= 16 ~ "Group 2 (Curves 9-16)",
+                 curve_id <= 24 ~ "Group 3 (Curves 17-24)",
+                 curve_id <= 32 ~ "Group 4 (Curves 25-32)"
+               )),
+         aes(x = dose_num, 
+             y = value, 
+             color = name)) +
+  geom_point(aes(size = is_med)) + 
+  geom_line() +
+  geom_hline(aes(yintercept = med_cutpoint), 
+             linetype = "dashed") + 
+  facet_grid(~ curve_id_grouping) +
+  labs(x = "Dose level (t)",
+       y = expression(xi[t]),
+       color = "Curve", 
+       size = "True MED") + 
+  scale_x_continuous(breaks = 1:6) + 
+  scale_y_continuous(limits= c(0, 0.9), 
+                     n.breaks = 11,
+                     expand = expansion(mult = 0.02)) +
+  scale_color_discrete(l = 45) + 
+  scale_size_manual(values = c(1, 1.75), 
+                    breaks = c("FALSE", "TRUE"),
+                    labels = c("No", "Yes")) + 
+  theme(text = element_text(size = 20),
+        legend.position = "right",
+        legend.text = element_text(size = 14),
+        legend.title = element_text(size = 14),
+        strip.text = element_text(size = 12),
+        panel.grid.minor.x = element_blank(),
+        panel.grid.major.x = element_blank());
+
+ggsave("all_curves.png", height = 6.5, width = 10, bg = "white")
+
+knitr::include_graphics("all_curves.png")
+
+```
+
