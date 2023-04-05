@@ -1,6 +1,6 @@
 ---
 title: "RunSimulations"
-date: "4-May-2022"
+date: "5-Apr-2023"
 geometry: margin=1.5cm
 output: 
   rmarkdown::html_vignette:
@@ -12,6 +12,7 @@ vignette: >
 ---
 
 ```{r setup}
+if(!require(tidyverse)) {install.packages("tidyverse"); library(tidyverse)}
 library(DoseDeescalation)
 ```
 
@@ -43,8 +44,8 @@ Note that `gen_curves()` always returns a list, even when just one curve is
 generated. Thus, I'm simplifying to a vector using `[[1]]`.
 
 Using a relative threshold of 0.8, the true MDSE is dose level `r min(which(curve1 / max(curve1) > 0.8))`,
-since $\xi_1/\xi_6 =$ `r round(curve1[[1]]/curve1[[6]], 3)` $ < 0.8$ and 
-since $\xi_2/\xi_6 =$ `r round(curve1[[2]]/curve1[[6]], 3)` $ > 0.8$.
+since $\xi_1/\xi_6 =$ `r round(curve1[[1]]/curve1[[6]], 3)` < 0.8 and 
+since $\xi_2/\xi_6 =$ `r round(curve1[[2]]/curve1[[6]], 3)` > 0.8.
 
 Now we simulate some data using each trial design applied to this true data
 generating curve. 

@@ -2,7 +2,7 @@
 % Please edit documentation in R/sim_model_deesc.R
 \name{sim_model_deesc}
 \alias{sim_model_deesc}
-\title{Simulate a dose deescalation trials}
+\title{Simulate many dose deescalation trials}
 \usage{
 sim_model_deesc(
   n_sim,
@@ -34,11 +34,13 @@ re-estimating the assigned dose level. The total sample size of a
 trial will be \code{sum(cohort_sizes)}. The initial cohort, which requires
 assignments prior to having any data, will also be deterministically
 allocated in descending order, starting from the top dose and proceeding
-downwards, recyclying as necessary.}
+downwards, recycling as necessary.}
 
-\item{cohort_dose_span}{A non-negative integer giving the number of dose
-levels below the current best dose (see \code{be_greedy}) to randomize to.
-Set to 0 to always choose the best dose.}
+\item{cohort_dose_span}{Non-negative integers giving the number of dose
+levels below the current best dose (see \code{be_greedy}) to randomize to. Should
+be equal in length to \code{cohort_sizes}. Set to 0 to always choose the best dose.
+Any integers equal to or greater than \code{length(true_eff_curve)} will be
+soft-truncated above at \code{length(true_eff_curve)-1}}
 
 \item{be_greedy}{A logical. If TRUE, the best dose is defined as the
 lowest dose level with posterior probability of being the MDSE greater
@@ -51,7 +53,8 @@ indicating the type of prior to use}
 
 \item{mc_warmup}{Number of warmup iterations for the sampler. Note
 the sampler will only be run once to sample from the prior; the posterior
-is approximated using these prior draws and the likelihood.}
+is approximated using these prior draws and the likelihood. Thus, \code{mc_warmup}
+and \code{mc_iter} (below) can and probably should be a lot larger than usual}
 
 \item{mc_iter}{Number of total iterations for the sampler. See also
 \code{mc_warmup} above}
@@ -64,11 +67,11 @@ is approximated using these prior draws and the likelihood.}
 \value{
 A named list with three objects:
 
-\code{subject_results} is a tibble containg subject-level information:
-the dose assignment (\code{dose_num}), the subject ID (\code{subj_id}), the recorded response (\code{resp}),
-the true response probability at the subject's assigned dose level (\code{true_xi}),
-the estimated posterior probability that their assigned
-dose number was the MDSE just prior to their enrollment (\code{prob_mdse_just_before}),
+\code{subject_results} is a tibble containg subject-level information: the dose
+assignment (\code{dose_num}), the subject ID (\code{subj_id}), the recorded response
+(\code{resp}), the true response probability at the subject's assigned dose level
+(\code{true_xi}), the estimated posterior probability that their assigned dose
+number was the MDSE just prior to their enrollment (\code{prob_mdse_just_before}),
 the estimated posterior mean of the response probability at the subject's
 assigned dose level \strong{as of the end of the trial} (\code{est_xi}), the estimated
 posterior probability that the subject's assigned dose level is true MDSE
@@ -76,26 +79,28 @@ posterior probability that the subject's assigned dose level is true MDSE
 that is not specific to the subject is an integer label for each simulated
 trial (\code{sim_id}), the prior used (\code{prior_type}).
 
-\code{mdse_results} is a tibble containing trial-level information: \code{sim_id}, \code{prior_type},
-a character giving the cohort sizes separated by commas (\code{cohort_sizes}),
-a character giving the dose spans used for each cohort separated by commas
-(\code{cohort_dose_span}), the total planned sample size of the trial (\code{n_patients}),
-the true MDSE in the trial (\code{true_mdse}), the estimated MDSE as of the end of the trial
-(\code{est_mdse}), the estimated \strong{absolute} response probability at the estimated
-MDSE as of the end of the trial (\code{est_xi_at_est_mdse}), the estimated \strong{relative}
-response probability at the estimated MDSE as compared to the response probability
-at the largest dose level (\code{est_rel_xi_at_est_mdse}), the estimated
-posterior probability that the subject's assigned dose level is true MDSE
-as of the end of the trial (\code{prob_mdse}), the actual number of subjects enrolled
-in the trial (\code{enrollment}), the number of subjects enrolled to the dose number
-that was the estimated MDSE at the end of the trial (\code{num_at_est_mdse}),
-below the estimated MDSE (\code{num_below_est_mdse}), above the estimated MDSE
-(\code{num_above_est_mdse}), at the \strong{true} MDSE (\code{num_at_true_mdse}), below
-the \strong{true} MDSE (\code{num_below_true_mdse}), and above the true MDSE (\code{num_above_true_mdse}),
-and the average of the true response probabilities across all subjects (\code{avg_true_xi}).
+\code{mdse_results} is a tibble containing trial-level information: \code{sim_id},
+\code{prior_type}, a character giving the cohort sizes separated by commas
+(\code{cohort_sizes}), a character giving the dose spans used for each cohort
+separated by commas (\code{cohort_dose_span}), the total planned sample size of
+the trial (\code{n_patients}), the true MDSE in the trial (\code{true_mdse}), the
+estimated MDSE as of the end of the trial (\code{est_mdse}), the estimated
+\strong{absolute} response probability at the estimated MDSE as of the end of the
+trial (\code{est_xi_at_est_mdse}), the estimated \strong{relative} response probability
+at the estimated MDSE as compared to the response probability at the largest
+dose level (\code{est_rel_xi_at_est_mdse}), the estimated posterior probability
+that the subject's assigned dose level is true MDSE as of the end of the
+trial (\code{prob_mdse}), the actual number of subjects enrolled in the trial
+(\code{enrollment}), the number of subjects enrolled to the dose number that was
+the estimated MDSE at the end of the trial (\code{num_at_est_mdse}), below the
+estimated MDSE (\code{num_below_est_mdse}), above the estimated MDSE
+(\code{num_above_est_mdse}), at the \strong{true} MDSE (\code{num_at_true_mdse}), below the
+\strong{true} MDSE (\code{num_below_true_mdse}), and above the true MDSE
+(\code{num_above_true_mdse}), and the average of the true response probabilities
+across all subjects (\code{avg_true_xi}).
 }
 \description{
-This function will simulate an arbtirary number
+This function will simulate an arbitrary number
 of dose deescalation trials for a given design configuration
 }
 \examples{

@@ -1,6 +1,6 @@
-#' @title Simulate a dose deescalation trials
+#' @title Simulate many dose deescalation trials
 #' 
-#' @description This function will simulate an arbtirary number
+#' @description This function will simulate an arbitrary number
 #' of dose deescalation trials for a given design configuration
 #'
 #'
@@ -16,10 +16,12 @@
 #' trial will be `sum(cohort_sizes)`. The initial cohort, which requires
 #' assignments prior to having any data, will also be deterministically
 #' allocated in descending order, starting from the top dose and proceeding
-#' downwards, recyclying as necessary. 
-#' @param cohort_dose_span A non-negative integer giving the number of dose 
-#' levels below the current best dose (see `be_greedy`) to randomize to. 
-#' Set to 0 to always choose the best dose. 
+#' downwards, recycling as necessary. 
+#' @param cohort_dose_span Non-negative integers giving the number of dose 
+#' levels below the current best dose (see `be_greedy`) to randomize to. Should
+#' be equal in length to `cohort_sizes`. Set to 0 to always choose the best dose. 
+#' Any integers equal to or greater than `length(true_eff_curve)` will be
+#' soft-truncated above at `length(true_eff_curve)-1`
 #' @param be_greedy A logical. If TRUE, the best dose is defined as the
 #' lowest dose level with posterior probability of being the MDSE greater
 #' than one over the number of dose levels. If FALSE, the best dose is 
@@ -29,7 +31,8 @@
 #' indicating the type of prior to use
 #' @param mc_warmup Number of warmup iterations for the sampler. Note
 #' the sampler will only be run once to sample from the prior; the posterior
-#' is approximated using these prior draws and the likelihood. 
+#' is approximated using these prior draws and the likelihood. Thus, `mc_warmup`
+#' and `mc_iter` (below) can and probably should be a lot larger than usual
 #' @param mc_iter Number of total iterations for the sampler. See also
 #' `mc_warmup` above 
 #' @param mc_chains Number of separate chains to run.  See also
@@ -38,37 +41,39 @@
 #'
 #' @return A named list with three objects:
 #' 
-#' `subject_results` is a tibble containg subject-level information: 
-#' the dose assignment (`dose_num`), the subject ID (`subj_id`), the recorded response (`resp`), 
-#' the true response probability at the subject's assigned dose level (`true_xi`), 
-#' the estimated posterior probability that their assigned
-#' dose number was the MDSE just prior to their enrollment (`prob_mdse_just_before`), 
+#' `subject_results` is a tibble containg subject-level information: the dose
+#' assignment (`dose_num`), the subject ID (`subj_id`), the recorded response
+#' (`resp`), the true response probability at the subject's assigned dose level
+#' (`true_xi`), the estimated posterior probability that their assigned dose
+#' number was the MDSE just prior to their enrollment (`prob_mdse_just_before`),
 #' the estimated posterior mean of the response probability at the subject's
 #' assigned dose level **as of the end of the trial** (`est_xi`), the estimated
 #' posterior probability that the subject's assigned dose level is true MDSE
 #' **as of the end of the trial** (`prob_mdse`). Other information
 #' that is not specific to the subject is an integer label for each simulated
-#' trial (`sim_id`), the prior used (`prior_type`). 
+#' trial (`sim_id`), the prior used (`prior_type`).
 #' 
 #' 
-#' `mdse_results` is a tibble containing trial-level information: `sim_id`, `prior_type`, 
-#' a character giving the cohort sizes separated by commas (`cohort_sizes`), 
-#' a character giving the dose spans used for each cohort separated by commas 
-#' (`cohort_dose_span`), the total planned sample size of the trial (`n_patients`), 
-#' the true MDSE in the trial (`true_mdse`), the estimated MDSE as of the end of the trial
-#' (`est_mdse`), the estimated **absolute** response probability at the estimated
-#' MDSE as of the end of the trial (`est_xi_at_est_mdse`), the estimated **relative** 
-#' response probability at the estimated MDSE as compared to the response probability
-#' at the largest dose level (`est_rel_xi_at_est_mdse`), the estimated
-#' posterior probability that the subject's assigned dose level is true MDSE
-#' as of the end of the trial (`prob_mdse`), the actual number of subjects enrolled
-#' in the trial (`enrollment`), the number of subjects enrolled to the dose number
-#' that was the estimated MDSE at the end of the trial (`num_at_est_mdse`), 
-#' below the estimated MDSE (`num_below_est_mdse`), above the estimated MDSE 
-#' (`num_above_est_mdse`), at the **true** MDSE (`num_at_true_mdse`), below
-#' the **true** MDSE (`num_below_true_mdse`), and above the true MDSE (`num_above_true_mdse`), 
-#' and the average of the true response probabilities across all subjects (`avg_true_xi`). 
-#'  
+#' `mdse_results` is a tibble containing trial-level information: `sim_id`,
+#' `prior_type`, a character giving the cohort sizes separated by commas
+#' (`cohort_sizes`), a character giving the dose spans used for each cohort
+#' separated by commas (`cohort_dose_span`), the total planned sample size of
+#' the trial (`n_patients`), the true MDSE in the trial (`true_mdse`), the
+#' estimated MDSE as of the end of the trial (`est_mdse`), the estimated
+#' **absolute** response probability at the estimated MDSE as of the end of the
+#' trial (`est_xi_at_est_mdse`), the estimated **relative** response probability
+#' at the estimated MDSE as compared to the response probability at the largest
+#' dose level (`est_rel_xi_at_est_mdse`), the estimated posterior probability
+#' that the subject's assigned dose level is true MDSE as of the end of the
+#' trial (`prob_mdse`), the actual number of subjects enrolled in the trial
+#' (`enrollment`), the number of subjects enrolled to the dose number that was
+#' the estimated MDSE at the end of the trial (`num_at_est_mdse`), below the
+#' estimated MDSE (`num_below_est_mdse`), above the estimated MDSE
+#' (`num_above_est_mdse`), at the **true** MDSE (`num_at_true_mdse`), below the
+#' **true** MDSE (`num_below_true_mdse`), and above the true MDSE
+#' (`num_above_true_mdse`), and the average of the true response probabilities
+#' across all subjects (`avg_true_xi`).
+#' 
 #' @export
 #'
 #' @examples 
@@ -94,12 +99,19 @@ sim_model_deesc <-
            seed = sample(.Machine$integer.max,1)) {
     
     
+    begin = Sys.time() 
+    
     prior_type = match.arg(prior_type)
     stopifnot(isTRUE(prior_type %in% c("horseshoe", "horseshoe_plus")))
     stopifnot(isTRUE(length(cohort_sizes) == length(cohort_dose_span)))
+    stopifnot(all(true_eff_curve >= 0) && all(true_eff_curve <= 1))
+    stopifnot(relative_threshold > 0 && relative_threshold <= 1)
+    # ensure non-negative integers
+    stopifnot(all(cohort_dose_span >= 0) && all(cohort_dose_span %% 1 == 0))
+    # force all spans to be no more than number of dose levels
+    cohort_dose_span = pmin(cohort_dose_span, length(true_eff_curve) - 1)
     
     n_subjects = sum(cohort_sizes);
-    stopifnot(relative_threshold > 0 && relative_threshold <= 1)
     num_dose_levels = length(true_eff_curve)
     subject_results = NULL
     mdse_results = 
@@ -140,9 +152,9 @@ sim_model_deesc <-
     
     get_new_dose <- 
       function(
-        posterior_prob_mdse,
-        num_pat,
-        dose_span
+    posterior_prob_mdse,
+    num_pat,
+    dose_span
       ) {
         
         if(!be_greedy) {
@@ -170,8 +182,8 @@ sim_model_deesc <-
     for(i in 1:n_sim) {
       posterior_prob_mdse <-
         get_posterior_prob_mdse(params = params, 
-                               relative_threshold = relative_threshold,
-                               data_grouped = NULL)
+                                relative_threshold = relative_threshold,
+                                data_grouped = NULL)
       
       
       initial_assignments = 
@@ -215,8 +227,8 @@ sim_model_deesc <-
       while(j <= length(cohort_sizes)) {
         posterior_prob_mdse <-
           get_posterior_prob_mdse(params = params, 
-                                 relative_threshold = relative_threshold,
-                                 data_grouped = curr_results)
+                                  relative_threshold = relative_threshold,
+                                  data_grouped = curr_results)
         
         curr_dose <- 
           get_new_dose(posterior_prob_mdse = posterior_prob_mdse,
@@ -252,8 +264,8 @@ sim_model_deesc <-
       
       posterior_prob_mdse <-
         get_posterior_prob_mdse(params = params, 
-                               relative_threshold = relative_threshold,
-                               data_grouped = curr_results)
+                                relative_threshold = relative_threshold,
+                                data_grouped = curr_results)
       
       posterior_dist_xi <- 
         get_posterior_dist_xi(params = params, 
@@ -342,7 +354,8 @@ sim_model_deesc <-
     
     return(list(subject_results = subject_results,
                 mdse_results = mdse_results,
-                seed = seed));
+                seed = seed, 
+                running_time = Sys.time() - begin));
     
   }
 
