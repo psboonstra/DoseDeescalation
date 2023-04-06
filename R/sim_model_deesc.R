@@ -134,7 +134,7 @@ sim_model_deesc <-
     true_mdse = 
       min(which(true_eff_curve / max(true_eff_curve) >= relative_threshold))
     
-    curr_fit <- sampling(object = stanmodels[[paste0("iso_",prior_type)]],
+   curr_fit <- sampling(object = stanmodels[[paste0("iso_",prior_type)]],
                          data = list(n_groups_stan = num_dose_levels,
                                      n_per_group_stan = as.array(numeric(num_dose_levels)),
                                      y_stan = as.array(numeric(num_dose_levels)),

@@ -1,6 +1,6 @@
 Package: DoseDeescalation
 Title: Recreate simulation study in Boonstra, Tabarrok, and Strohbehn
-Version: 0.0.0.9000
+Version: 0.0.1
 Authors@R: 
     person(given = "Philip",
            family = "Boonstra",

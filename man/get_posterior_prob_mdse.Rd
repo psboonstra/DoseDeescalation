@@ -4,25 +4,36 @@
 \alias{get_posterior_prob_mdse}
 \title{Posterior probability of being minimum dose with satisfactory efficacy (MDSE)}
 \usage{
-get_posterior_prob_mdse(params, relative_threshold, data_grouped = NULL)
+get_posterior_prob_mdse(params, relative_threshold = 0.8, data_grouped = NULL)
 }
 \arguments{
-\item{params}{A tibble coming from calling \code{rstan::extract(x)$xi}, where
-x is a stanfit object from either the horseshoe or horseshoe plus priors.}
+\item{params}{A matrix that normally comes from calling
+\code{rstan::extract(x)$xi}, where \code{x} is a stanfit object from either
+\code{iso_horseshoe} or \code{iso_horseshoe_plus}. The rows of this matrix represent
+draws from the \emph{prior} distribution, and the columns represent the
+individual components of \eqn{\xi}.}
 
 \item{relative_threshold}{A number between 0 and 1 indicating the smallest
-relative efficacy as compared to the largest dose level that would still
-be considered acceptable.}
+relative efficacy as compared to the largest dose level that would still be
+considered acceptable. Its default value is set to 0.8, which is used in the
+manuscript.}
 
-\item{data_grouped}{A tibble with three named columns: \code{n}, \code{resp}, and \code{dose_num},
-corresponding to the number of observations, number of responses among those
-observations, and dose number label}
+\item{data_grouped}{A tibble with two named columns: \code{n} and \code{resp},
+corresponding to the number of observations and number of responses among
+those observations. The number of rows must be equal to the number of
+columns in \code{params}, corresponding to the number of dose levels. It is
+assumed that the rows are ordered by dose number, with the first row
+corresponding to the smallest/lowest dose and the last row corresponding to
+the largest/highest dose. Additional columns are allowed and will be
+ignored. \code{data_grouped} can alternatively be \code{NULL}, in which case you will
+get draws from the priors.}
 }
 \value{
-A simplex vector of probabilities
+A simplex vector of probabilities, interpreted as the posterior
+probability that each dose level is the MDSE.
 }
 \description{
-Clever way to calculate the posterior probability of
-each dose level being the MDSE given draws
-from the prior and the log-likelihood of data
+Clever way to calculate the posterior probability of each dose
+level being the MDSE given draws from the prior and the log-likelihood of
+data
 }

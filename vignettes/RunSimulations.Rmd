@@ -34,7 +34,7 @@ To use `gen_curves()`, you provide the parameters for the Hill equation as well 
 equation $\Pr(Y=1|x) = 0.99b$, i.e. 99\% of the maximum possible efficacy in that
 curve. 
 
-```{r gen_curves, eval = TRUE, cache = TRUE}
+```{r gen_curves, eval = TRUE}
 # This is Curve 1 from the manuscript. 
 curve1 <- 
   gen_curves(number_dose_levels = 6, a = 0.2, b_seq = 0.85, c = 0.7, d_seq = 1)[[1]]
@@ -60,7 +60,7 @@ starting at the highest dose level and proceeding downwards as far as is allowed
 by the value of `cohort_dose_span`, then recycling as necessary. This will
 ensure equal allocation of subjects to all dose levels. 
 
-```{r equal_allocation, eval = TRUE, cache = TRUE}
+```{r equal_allocation, eval = TRUE}
 equal_allocation <- 
   sim_model_deesc(n_sim = 10, 
                   true_eff_curve = curve1,
@@ -101,7 +101,7 @@ at that time -- an estimated posterior probability of being the MDSE that is
 greater than the average posterior probability of being the MDSE across all dose
 levels. 
 
-```{r greedy, eval = TRUE, cache = TRUE}
+```{r greedy, eval = TRUE}
 greedy <- 
   sim_model_deesc(n_sim = 10, 
                   true_eff_curve = curve1,
@@ -140,7 +140,7 @@ equal to the desired total sample size, (ii) `cohort_dose_span` should
 be a vector of 0s with same length as `cohort_sizes`; and (iii) `be_greedy` 
 should be `FALSE`. Each patient is allocated to the dose level having -- at that time -- the largest estimated posterior probability of being the MDSE.
 
-```{r naive, eval = TRUE, cache = TRUE}
+```{r naive, eval = TRUE}
 naive <- 
   sim_model_deesc(n_sim = 10, 
                   true_eff_curve = curve1,
@@ -177,7 +177,7 @@ To implement Targeted Randomization, (i) `cohort_sizes` should be a vector of 1s
 up to three dose levels: the estimated MDSE and up to two dose levels
 below it, with probability proportional to each dose level's posterior probability of being the MDSE.. 
 
-```{r targeted_randomization, eval = TRUE, cache = TRUE}
+```{r targeted_randomization, eval = TRUE}
 targeted_randomization <- 
   sim_model_deesc(n_sim = 10, 
                   true_eff_curve = curve1,
@@ -213,7 +213,7 @@ targeted_randomization$mdse_results %>%
 To implement Targeted Randomization (Cohorts), (i) `cohort_sizes` should be a vector of cohort-specific sample sizes with length equal to the desired total sample size, (ii) `cohort_dose_span` should be a vector of 2s with same length as `cohort_sizes`; and (iii) `be_greedy` should be `FALSE`. Each patient is randomly assigned to one of up to three dose levels: the estimated MDSE and up to two dose levels below it, with probability proportional to each dose level's posterior probability of being the MDSE. Distinct from Targeted Randomization, 
 however, these probabilities are only updated after each cohort is completed. 
 
-```{r targeted_randomization_cohort, eval = TRUE, cache = TRUE}
+```{r targeted_randomization_cohort, eval = TRUE}
 targeted_randomization_cohort <- 
   sim_model_deesc(n_sim = 10, 
                   true_eff_curve = curve1,
@@ -272,7 +272,7 @@ my_computer = T;
 
 if(my_computer) {
   array_id = 3;
-  rstan_options(auto_write = TRUE);
+  rstan::rstan_options(auto_write = TRUE);
   n_sim = 10
   mc_warmup = 5e3;
   mc_iter = mc_warmup + 5e4
@@ -281,7 +281,7 @@ if(my_computer) {
 } else {
   #
   array_id = as.numeric(Sys.getenv('SLURM_ARRAY_TASK_ID'));
-  rstan_options(auto_write = FALSE);
+  rstan::rstan_options(auto_write = FALSE);
   n_sim = 500
   mc_warmup = 2e4;
   mc_iter = mc_warmup + 2e5;
