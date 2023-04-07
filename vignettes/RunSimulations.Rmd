@@ -788,57 +788,5 @@ for(curr_group in c("Group 1", "Group 2", "Group 3", "Group 4")) {
   
 }
 
-# Figure 1 
-
-curve_plot <- 
-  ggplot(curve_list %>% 
-           map_dfr(~ .x %>% as_tibble(), .id = "name") %>%
-           group_by(name) %>%
-           mutate(dose_num = 1:n(),
-                  is_med = (value / max(value) > 0.8) & (lag(value) / max(value) <= 0.8), 
-                  med_cutpoint = 0.8 * max(value)) %>%
-           ungroup() %>%
-           mutate(
-             curve_id = as.numeric(name),
-             name = factor(name) %>% fct_inorder(),
-             curve_id_grouping = 
-               case_when(
-                 curve_id <= 8 ~ "Group 1 (Curves 1-8)",
-                 curve_id <= 16 ~ "Group 2 (Curves 9-16)",
-                 curve_id <= 24 ~ "Group 3 (Curves 17-24)",
-                 curve_id <= 32 ~ "Group 4 (Curves 25-32)"
-               )),
-         aes(x = dose_num, 
-             y = value, 
-             color = name)) +
-  geom_point(aes(size = is_med)) + 
-  geom_line() +
-  geom_hline(aes(yintercept = med_cutpoint), 
-             linetype = "dashed") + 
-  facet_grid(~ curve_id_grouping) +
-  labs(x = "Dose level (t)",
-       y = expression(xi[t]),
-       color = "Curve", 
-       size = "True MED") + 
-  scale_x_continuous(breaks = 1:6) + 
-  scale_y_continuous(limits= c(0, 0.9), 
-                     n.breaks = 11,
-                     expand = expansion(mult = 0.02)) +
-  scale_color_discrete(l = 45) + 
-  scale_size_manual(values = c(1, 1.75), 
-                    breaks = c("FALSE", "TRUE"),
-                    labels = c("No", "Yes")) + 
-  theme(text = element_text(size = 20),
-        legend.position = "right",
-        legend.text = element_text(size = 14),
-        legend.title = element_text(size = 14),
-        strip.text = element_text(size = 12),
-        panel.grid.minor.x = element_blank(),
-        panel.grid.major.x = element_blank());
-
-ggsave("all_curves.png", height = 6.5, width = 10, bg = "white")
-
-knitr::include_graphics("all_curves.png")
-
 ```
 
