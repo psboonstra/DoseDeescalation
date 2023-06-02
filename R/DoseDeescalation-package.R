@@ -1,6 +1,9 @@
 #' The 'DoseDeescalation' package.
 #'
-#' @description A DESCRIPTION OF THE PACKAGE
+#' @description This R package provides all of the code necessary to re-create
+#'   the simulation study reported in *Targeted randomization de-escalation
+#'   trials enable fractional dosing of scarce drugs* by Boonstra, Tabarrok, and
+#'   Strohbehn.
 #'
 #' @docType package
 #' @name DoseDeescalation-package
@@ -11,6 +14,11 @@
 #' @importFrom rstan sampling
 #'
 #' @references
-#' Stan Development Team (2020). RStan: the R interface to Stan. R package version 2.21.2. https://mc-stan.org
+#' 
+#' Boonstra, Tabarrok, and Strohbehn (2023). Targeted randomization de-escalation
+#'   trials enable fractional dosing of scarce drugs. Under Review
+#' 
+#' Stan Development Team (2020). RStan: the R interface to Stan. R package
+#' version 2.21.2. https://mc-stan.org
 #'
 NULL

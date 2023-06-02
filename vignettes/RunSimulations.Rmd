@@ -27,12 +27,18 @@ Hill equation, defined as:
 $$
 \Pr(Y=1|x) =  b + \dfrac{a - b}{1 + (x / c) ^ d} = a + \dfrac{b - a}{1 + (c / x) ^ d}
 $$
-The two formulations above are equivalent. The $a$ parameter is the $y$-intercept, 
-$b$ is the upper asymptote, $c$ is the value of $x$ that gives the midpoint between asymptotes $\Pr(Y=1|x=c) = 0.5 \times\left[\Pr(Y=1|x=0) + \Pr(Y=1|x=\infty)\right] = a/2 + b/2$, and $d$ controls the slope of the curve. 
+The two formulations above are equivalent. The $a$ parameter is the
+$y$-intercept, $b$ is the upper asymptote, $c$ is the value of $x$ that gives
+the midpoint between asymptotes $\Pr(Y=1|x=c) = 0.5 \times\left[\Pr(Y=1|x=0) +
+\Pr(Y=1|x=\infty)\right] = a/2 + b/2$, and $d$ controls the slope of the curve.
 
-To use `gen_curves()`, you provide the parameters for the Hill equation as well as the desired number of dose levels. For each combination of parameters you've provided, you get back a vector of numbers giving the true response probabilities (i.e. the height of the curve) as equidistant points along the x-axis. The first point always corresponds to $x=0$, and the last point always corresponds to the value of $x$ that solves the
-equation $\Pr(Y=1|x) = 0.99b$, i.e. 99\% of the maximum possible efficacy in that
-curve. 
+To use `gen_curves()`, you provide the parameters for the Hill equation as well
+as the desired number of dose levels. For each combination of parameters you've
+provided, you get back a vector of numbers giving the true response
+probabilities (i.e. the height of the curve) as equidistant points along the
+x-axis. The first point always corresponds to $x=0$, and the last point always
+corresponds to the value of $x$ that solves the equation $\Pr(Y=1|x) = 0.99b$,
+i.e. 99\% of the maximum possible efficacy in that curve.
 
 ```{r gen_curves, eval = TRUE}
 # This is Curve 1 from the manuscript. 
@@ -43,9 +49,10 @@ curve1;
 Note that `gen_curves()` always returns a list, even when just one curve is 
 generated. Thus, I'm simplifying to a vector using `[[1]]`.
 
-Using a relative threshold of 0.8, the true MDSE is dose level `r min(which(curve1 / max(curve1) > 0.8))`,
-since $\xi_1/\xi_6 =$ `r round(curve1[[1]]/curve1[[6]], 3)` < 0.8 and 
-since $\xi_2/\xi_6 =$ `r round(curve1[[2]]/curve1[[6]], 3)` > 0.8.
+Using a relative threshold of 0.8, the true MDSE is dose level `r
+min(which(curve1 / max(curve1) > 0.8))`, since $\xi_1/\xi_6 =$ `r
+round(curve1[[1]]/curve1[[6]], 3)` < 0.8 and since $\xi_2/\xi_6 =$ `r
+round(curve1[[2]]/curve1[[6]], 3)` > 0.8.
 
 Now we simulate some data using each trial design applied to this true data
 generating curve. 
@@ -136,9 +143,10 @@ greedy$mdse_results %>%
 ### Naive
 
 To implement Naive, (i) `cohort_sizes` should be a vector of 1s with length
-equal to the desired total sample size, (ii) `cohort_dose_span` should
-be a vector of 0s with same length as `cohort_sizes`; and (iii) `be_greedy` 
-should be `FALSE`. Each patient is allocated to the dose level having -- at that time -- the largest estimated posterior probability of being the MDSE.
+equal to the desired total sample size, (ii) `cohort_dose_span` should be a
+vector of 0s with same length as `cohort_sizes`; and (iii) `be_greedy` should be
+`FALSE`. Each patient is allocated to the dose level having -- at that time --
+the largest estimated posterior probability of being the MDSE.
 
 ```{r naive, eval = TRUE}
 naive <- 
@@ -173,9 +181,13 @@ naive$mdse_results %>%
 
 ### Targeted Randomization
 
-To implement Targeted Randomization, (i) `cohort_sizes` should be a vector of 1s with length equal to the desired total sample size, (ii) `cohort_dose_span` should be a vector of 2s with same length as `cohort_sizes`; and (iii) `be_greedy` should be `FALSE`. Each patient is randomly assigned to one of 
-up to three dose levels: the estimated MDSE and up to two dose levels
-below it, with probability proportional to each dose level's posterior probability of being the MDSE.. 
+To implement Targeted Randomization, (i) `cohort_sizes` should be a vector of 1s
+with length equal to the desired total sample size, (ii) `cohort_dose_span`
+should be a vector of 2s with same length as `cohort_sizes`; and (iii)
+`be_greedy` should be `FALSE`. Each patient is randomly assigned to one of up to
+three dose levels: the estimated MDSE and up to two dose levels below it, with
+probability proportional to each dose level's posterior probability of being the
+MDSE.
 
 ```{r targeted_randomization, eval = TRUE}
 targeted_randomization <- 
@@ -210,8 +222,14 @@ targeted_randomization$mdse_results %>%
 
 ### Targeted Randomization (Cohorts)
 
-To implement Targeted Randomization (Cohorts), (i) `cohort_sizes` should be a vector of cohort-specific sample sizes with length equal to the desired total sample size, (ii) `cohort_dose_span` should be a vector of 2s with same length as `cohort_sizes`; and (iii) `be_greedy` should be `FALSE`. Each patient is randomly assigned to one of up to three dose levels: the estimated MDSE and up to two dose levels below it, with probability proportional to each dose level's posterior probability of being the MDSE. Distinct from Targeted Randomization, 
-however, these probabilities are only updated after each cohort is completed. 
+To implement Targeted Randomization (Cohorts), (i) `cohort_sizes` should be a
+vector of cohort-specific sample sizes with length equal to the desired total
+sample size, (ii) `cohort_dose_span` should be a vector of 2s with same length
+as `cohort_sizes`; and (iii) `be_greedy` should be `FALSE`. Each patient is
+randomly assigned to one of up to three dose levels: the estimated MDSE and up
+to two dose levels below it, with probability proportional to each dose level's
+posterior probability of being the MDSE. Distinct from Targeted Randomization,
+however, these probabilities are only updated after each cohort is completed.
 
 ```{r targeted_randomization_cohort, eval = TRUE}
 targeted_randomization_cohort <- 
