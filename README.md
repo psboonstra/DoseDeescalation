@@ -2,7 +2,7 @@
 
 This R package provides code to simulate the designs considered in
 *Targeted randomization de-escalation trials enable fractional dosing of scarce drugs*
-by Boonstra, Tabarrok, and Strohbehn (2022). You can find a preprint [here](www.umich.edu/~philb/pdfs/dosedeescalation.pdf).
+by Boonstra, Tabarrok, and Strohbehn (2022). You can find a preprint [here](http://www.umich.edu/~philb/pdfs/dosedeescalation.pdf).
 
 Install the package using `devtools::install_github("psboonstra/DoseDeescalation", build_vignettes = TRUE)`
 
